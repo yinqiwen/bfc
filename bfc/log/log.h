@@ -62,15 +62,6 @@ spdlog::logger* get_default_raw_logger();
 #define BFC_ERROR(...) BFC_LOG(spdlog::level::err, __VA_ARGS__)
 #define BFC_CRITICAL(...) BFC_LOG(spdlog::level::critical, __VA_ARGS__)
 
-#define LOG_RETURN_ERROR_STATUS(status)                                               \
-  do {                                                                                \
-    auto return_status = (status);                                                    \
-    if (!return_status.ok()) {                                                        \
-      BFC_ERROR("{}:{} status:{}", __FUNCTION__, __LINE__, return_status.ToString()); \
-      return status;                                                                  \
-    }                                                                                 \
-  } while (0)
-
 #define BFC_LOG_EVERY_N(level, n, ...)                                    \
   do {                                                                    \
     static std::atomic<int> LOG_OCCURRENCES(0), LOG_OCCURRENCES_MOD_N(0); \
