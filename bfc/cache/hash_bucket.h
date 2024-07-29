@@ -62,9 +62,10 @@ struct HashBucketEntry {
   }
   inline bool operator==(const HashBucketEntry& other) const { return control_ == other.control_; }
   inline bool operator!=(const HashBucketEntry& other) const { return control_ != other.control_; }
-  inline bool Unused() const { return control_ == 0; }
+  inline bool Unused() const { return address_ == 0; }
   inline Address GetAddress() const { return Address{address_}; }
   inline void SetAddress(Address addr) { address_ = addr.Control(); }
+  uint32_t Contorl() const { return control_; }
   void SetHash(uint64_t hashcode) { hash_ = (hashcode & kMaxHash); }
   bool EqualHash(uint64_t hashcode) const {
     uint64_t expect_hash0 = (hashcode & kMaxHash);

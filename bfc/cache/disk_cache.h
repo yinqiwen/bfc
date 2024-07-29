@@ -108,6 +108,8 @@ class DiskCache {
   absl::StatusOr<DiskEntryValue<key_type, value_type>> GetEntry(const KeyT& key, uint64_t hashcode, Address start_addr,
                                                                 bool with_value);
   void PutEntry(uint64_t hashcode, Address addr, uint8_t* entry_ptr, DiskEntryHeader& header);
+  absl::Status PutDiskEntry(DiskEntryHeader& disk_entry, uint32_t bucket_idx, uint64_t hashcode, const key_type& key,
+                            std::vector<uint8_t>& content);
 
   void SampleRoutine();
 
@@ -170,6 +172,8 @@ absl::Status DiskCache<K, V, H, E>::Init(const CacheOptions& opts) {
     cache_header_->start_segment = -1;
     cache_header_->end_segment = -1;
     buckets_ = reinterpret_cast<HashBucket*>(cache_index_buffer_ + kCacheHeaderSize);
+
+    printf("#### init %llu\n", buckets_[0].entries[0].Contorl());
     SegmentStore::Options segment_store_opts;
     segment_store_opts.dir = opts_.dir;
     segment_store_opts.max_segments = opts_.max_segments;
@@ -417,52 +421,34 @@ absl::StatusOr<DiskEntryValue<K, V>> DiskCache<K, V, H, E>::GetEntry(const K& ke
     absl::Span<const uint8_t> key_view;
     absl::Span<const uint8_t> value_view;
     key_view = absl::Span<const uint8_t>(entry_ptr + kDiskEntryHeaderLen, header.GetKeySize());
-    if (with_value) {
-      value_view =
-          absl::Span<const uint8_t>(entry_ptr + kDiskEntryHeaderLen + header.GetKeySize(), header.GetValueSize());
-    }
+    value_view =
+        absl::Span<const uint8_t>(entry_ptr + kDiskEntryHeaderLen + header.GetKeySize(), header.GetValueSize());
     DiskObjectHelper<K> key_helper;
     DiskEntryValue<K, V> entry;
+
     if (!key_helper.Parse(entry.key, key_view)) {
       return absl::DataLossError("parse key failed");
     }
-    if (with_value) {
-      DiskObjectHelper<V> value_helper;
-      if (!value_helper.Parse(entry.value, value_view)) {
-        return absl::DataLossError("parse value failed");
-      }
-    }
+
     if (equal_(entry.key, key)) {
       entry.addr = start_addr;
       entry.header = header;
       entry.create_unix_secs = create_unix_secs;
+      if (with_value) {
+        DiskObjectHelper<V> value_helper;
+        if (!value_helper.Parse(entry.value, value_view)) {
+          return absl::DataLossError("parse value failed");
+        }
+      }
       return entry;
     } else {
       return GetEntry(key, hashcode, header.GetPrev(), with_value);
     }
   }
 }
-
 template <class K, class V, class H, class E>
-absl::Status DiskCache<K, V, H, E>::Put(const K& key, V&& val) {
-  uint64_t hashcode = hash_(key);
-  uint32_t bucket_idx = GetBucketIndex(hashcode);
-
-  DiskEntryHeader disk_entry;
-  std::vector<uint8_t> content;
-  content.resize(sizeof(DiskEntryHeader));
-  DiskObjectHelper<K> key_serializer;
-  if (!key_serializer.Serialize(key, content)) {
-    return absl::InvalidArgumentError("serialize key failed");
-  }
-  disk_entry.SetKeySize(content.size() - sizeof(DiskEntryHeader));
-  DiskObjectHelper<V> value_serializer;
-  if (!value_serializer.Serialize(val, content)) {
-    return absl::InvalidArgumentError("serialize value failed");
-  }
-  disk_entry.SetValueSize(content.size() - sizeof(DiskEntryHeader) - disk_entry.GetKeySize());
-  disk_entry.SetHash(hashcode);
-
+absl::Status DiskCache<K, V, H, E>::PutDiskEntry(DiskEntryHeader& disk_entry, uint32_t bucket_idx, uint64_t hashcode,
+                                                 const K& key, std::vector<uint8_t>& content) {
   HashBucketEntry* unused_entry = nullptr;
   // std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
   for (auto& entry : buckets_[bucket_idx].entries) {
@@ -495,37 +481,69 @@ absl::Status DiskCache<K, V, H, E>::Put(const K& key, V&& val) {
     }
   }
 
-  std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
-  if (!opts_.append_only) {
-    auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false);
-    if (disk_entry_result.ok()) {
-      DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
-      if (exist_disk_entry.header.GetValueSize() >= disk_entry.GetValueSize()) {
-        return UpdateValue(exist_disk_entry.addr, exist_disk_entry.header, content);
+  {
+    std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
+    if (!opts_.append_only) {
+      auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false);
+      if (disk_entry_result.ok()) {
+        DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
+        if (exist_disk_entry.header.GetValueSize() >= disk_entry.GetValueSize()) {
+          return UpdateValue(exist_disk_entry.addr, exist_disk_entry.header, content);
+        }
       }
     }
-  }
-  if (unused_entry != nullptr) {
-    memcpy(&content[0], &disk_entry, sizeof(disk_entry));
-    auto write_result = Write(content);
-    if (!write_result.ok()) {
-      return write_result.status();
+    if (nullptr == unused_entry) {
+      if (!buckets_[bucket_idx].overflow_entry.Unused()) {
+        disk_entry.SetPrev(buckets_[bucket_idx].overflow_entry.GetAddress());
+      }
+      memcpy(&content[0], &disk_entry, sizeof(disk_entry));
+      auto write_result = Write(content);
+      if (!write_result.ok()) {
+        return write_result.status();
+      }
+      Address write_addr = write_result.value();
+      buckets_[bucket_idx].overflow_entry.SetAddress(write_addr);
+      return absl::OkStatus();
     }
-    unused_entry->SetHash(hashcode);
-    unused_entry->SetAddress(write_result.value());
-    return absl::OkStatus();
   }
-  if (!buckets_[bucket_idx].overflow_entry.Unused()) {
-    disk_entry.SetPrev(buckets_[bucket_idx].overflow_entry.GetAddress());
+  {
+    std::lock_guard<BucketLock> guard(unused_entry->GetLock());
+    if (unused_entry->Unused()) {
+      memcpy(&content[0], &disk_entry, sizeof(disk_entry));
+      auto write_result = Write(content);
+      if (!write_result.ok()) {
+        return write_result.status();
+      }
+      unused_entry->SetHash(hashcode);
+      unused_entry->SetAddress(write_result.value());
+      return absl::OkStatus();
+    }
   }
-  memcpy(&content[0], &disk_entry, sizeof(disk_entry));
-  auto write_result = Write(content);
-  if (!write_result.ok()) {
-    return write_result.status();
+  // try again
+  return PutDiskEntry(disk_entry, bucket_idx, hashcode, key, content);
+}
+
+template <class K, class V, class H, class E>
+absl::Status DiskCache<K, V, H, E>::Put(const K& key, V&& val) {
+  uint64_t hashcode = hash_(key);
+  uint32_t bucket_idx = GetBucketIndex(hashcode);
+
+  DiskEntryHeader disk_entry;
+  std::vector<uint8_t> content;
+  content.resize(sizeof(DiskEntryHeader));
+  DiskObjectHelper<K> key_serializer;
+  if (!key_serializer.Serialize(key, content)) {
+    return absl::InvalidArgumentError("serialize key failed");
   }
-  Address write_addr = write_result.value();
-  buckets_[bucket_idx].overflow_entry.SetAddress(write_addr);
-  return absl::OkStatus();
+  disk_entry.SetKeySize(content.size() - sizeof(DiskEntryHeader));
+  DiskObjectHelper<V> value_serializer;
+  if (!value_serializer.Serialize(val, content)) {
+    return absl::InvalidArgumentError("serialize value failed");
+  }
+  disk_entry.SetValueSize(content.size() - sizeof(DiskEntryHeader) - disk_entry.GetKeySize());
+  disk_entry.SetHash(hashcode);
+
+  return PutDiskEntry(disk_entry, bucket_idx, hashcode, key, content);
 }
 
 template <class K, class V, class H, class E>
@@ -552,7 +570,7 @@ absl::StatusOr<V> DiskCache<K, V, H, E>::Get(const K& key, uint64_t* create_unix
     }
   }
   std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
-  auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false);
+  auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), true);
   if (disk_entry_result.ok()) {
     DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
     if (nullptr != create_unix_secs) {

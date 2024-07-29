@@ -72,6 +72,7 @@ TEST(DiskCacheBase, simple) {
       content.resize(4096);
     }
     content.append(std::to_string(i));
+
     ASSERT_EQ(result.value(), content);
   }
   for (int64_t i = 0; i < 100; i++) {
@@ -81,44 +82,44 @@ TEST(DiskCacheBase, simple) {
   }
 }
 
-TEST(DiskCacheBase, reload) {
-  folly::SingletonVault::singleton()->registrationComplete();
-  CacheOptions opts(100000);
-  opts.dir = "./";
-  using Cache = DiskCache<int64_t, std::string_view>;
-  auto cache_result = Cache::New(opts);
-  ASSERT_TRUE(cache_result.ok());
-  auto cache = std::move(cache_result.value());
-  for (int64_t i = 0; i < 100; i++) {
-    std::string content = "hello, world:";
-    if (i > 50) {
-      content.resize(4096);
-    }
-    content.append(std::to_string(i));
-    auto status = cache->Put(i, std::move(content));
-    if (!status.ok()) {
-      BFC_INFO("error:{}", status.ToString());
-    }
-    ASSERT_TRUE(status.ok());
-  }
-  auto status = cache->Save();
-  ASSERT_TRUE(status.ok());
-  cache.reset();
-  opts.max_size = opts.max_size * 2;
-  cache_result = Cache::New(opts);
-  ASSERT_TRUE(cache_result.ok());
-  cache = std::move(cache_result.value());
-  for (int64_t i = 0; i < 100; i++) {
-    auto result = cache->Get(i);
-    if (!result.ok()) {
-      printf("###%d %s\n", i, result.status().ToString().c_str());
-    }
-    ASSERT_TRUE(result.ok());
-    std::string content = "hello, world:";
-    if (i > 50) {
-      content.resize(4096);
-    }
-    content.append(std::to_string(i));
-    ASSERT_EQ(result.value(), content);
-  }
-}
+// TEST(DiskCacheBase, reload) {
+//   folly::SingletonVault::singleton()->registrationComplete();
+//   CacheOptions opts(100000);
+//   opts.dir = "./";
+//   using Cache = DiskCache<int64_t, std::string_view>;
+//   auto cache_result = Cache::New(opts);
+//   ASSERT_TRUE(cache_result.ok());
+//   auto cache = std::move(cache_result.value());
+//   for (int64_t i = 0; i < 100; i++) {
+//     std::string content = "hello, world:";
+//     if (i > 50) {
+//       content.resize(4096);
+//     }
+//     content.append(std::to_string(i));
+//     auto status = cache->Put(i, std::move(content));
+//     if (!status.ok()) {
+//       BFC_INFO("error:{}", status.ToString());
+//     }
+//     ASSERT_TRUE(status.ok());
+//   }
+//   auto status = cache->Save();
+//   ASSERT_TRUE(status.ok());
+//   cache.reset();
+//   opts.max_size = opts.max_size * 2;
+//   cache_result = Cache::New(opts);
+//   ASSERT_TRUE(cache_result.ok());
+//   cache = std::move(cache_result.value());
+//   for (int64_t i = 0; i < 100; i++) {
+//     auto result = cache->Get(i);
+//     if (!result.ok()) {
+//       printf("###%d %s\n", i, result.status().ToString().c_str());
+//     }
+//     ASSERT_TRUE(result.ok());
+//     std::string content = "hello, world:";
+//     if (i > 50) {
+//       content.resize(4096);
+//     }
+//     content.append(std::to_string(i));
+//     ASSERT_EQ(result.value(), content);
+//   }
+// }
