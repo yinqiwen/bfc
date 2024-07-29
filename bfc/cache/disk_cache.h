@@ -173,7 +173,6 @@ absl::Status DiskCache<K, V, H, E>::Init(const CacheOptions& opts) {
     cache_header_->end_segment = -1;
     buckets_ = reinterpret_cast<HashBucket*>(cache_index_buffer_ + kCacheHeaderSize);
 
-    printf("#### init %llu\n", buckets_[0].entries[0].Contorl());
     SegmentStore::Options segment_store_opts;
     segment_store_opts.dir = opts_.dir;
     segment_store_opts.max_segments = opts_.max_segments;
@@ -403,6 +402,7 @@ absl::StatusOr<DiskEntryValue<K, V>> DiskCache<K, V, H, E>::GetEntry(const K& ke
   if (start_addr.Control() == 0) {
     return absl::NotFoundError("");
   }
+  stats_.io_read_count.increment(1);
   uint64_t create_unix_secs;
   auto result = segment_store_->Get({start_addr.Segment(), start_addr.Offset()}, &create_unix_secs);
   if (!result.ok()) {

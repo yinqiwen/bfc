@@ -39,5 +39,6 @@ struct Stats {
   folly::ThreadCachedInt<uint64_t> cache_hit{0};
   folly::ThreadCachedInt<int64_t> cache_missing{0};
   folly::ThreadCachedInt<uint64_t> evit_count{0};
+  folly::ThreadCachedInt<uint64_t> io_read_count{0};
 };
 }  // namespace bfc

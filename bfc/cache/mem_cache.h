@@ -70,7 +70,7 @@ class MemCache {
 
  private:
   static constexpr uint32_t kClockTimeBits = 30;
-  static constexpr uint32_t kArraySizeHint = 8;
+  static constexpr size_t kArraySizeHint = 8;
   static constexpr uint32_t kLRUSamplePoolSize = 128;
   static constexpr uint32_t kMaxLRUEvictCountPerLoop = 100;
   using KeyLock = folly::PicoSpinLock<uint64_t>;
@@ -151,9 +151,9 @@ template <class K, class V, class H, class E>
 std::vector<typename MemCache<K, V, H, E>::SampleItem> MemCache<K, V, H, E>::CacheRandomGetN(uint32_t n) {
   std::vector<SampleItem> results;
   results.reserve(n);
-  uint32_t maxsteps = n * 10;
+  int32_t maxsteps = static_cast<int32_t>(n) * 10;
   uint32_t cursor = 0;
-  while (results.size() < n && maxsteps--) {
+  while (results.size() < static_cast<size_t>(n) && maxsteps--) {
     auto rand = folly::Random::rand32(0, opts_.max_size, rng_);
     Bucket& bucket = buckets_[rand];
     std::lock_guard<BucketLock> guard(bucket_locks_[rand]);
@@ -163,7 +163,9 @@ std::vector<typename MemCache<K, V, H, E>::SampleItem> MemCache<K, V, H, E>::Cac
       if (key.IsEmpty()) {
         continue;
       }
-      SampleItem item{.bucket_idx = rand, .list_idx = list_idx - 1, .idle_unix_secs = key.GetAccessIdleTimeSecs()};
+      SampleItem item{.bucket_idx = static_cast<int32_t>(rand),
+                      .list_idx = static_cast<int32_t>(list_idx - 1),
+                      .idle_unix_secs = key.GetAccessIdleTimeSecs()};
       if (results.size() < n) {
         results.emplace_back(item);
       } else {
@@ -239,7 +241,7 @@ void MemCache<K, V, H, E>::PerformEvictions() {
     auto sample = tls_lru_sample_pool[k];
     tls_lru_sample_pool[k].Clear();
     std::lock_guard<BucketLock> guard(bucket_locks_[sample.bucket_idx]);
-    if (buckets_[sample.bucket_idx].keys.size() <= sample.list_idx) {
+    if (buckets_[sample.bucket_idx].keys.size() <= static_cast<size_t>(sample.list_idx)) {
       continue;
     }
     if (buckets_[sample.bucket_idx].keys[sample.list_idx].GetAccessIdleTimeSecs() >= sample.idle_unix_secs) {
