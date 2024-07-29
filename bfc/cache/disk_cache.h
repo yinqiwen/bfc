@@ -34,6 +34,7 @@
 #include <atomic>
 #include <filesystem>
 #include <memory>
+#include <system_error>
 #include <tuple>
 #include <utility>
 
@@ -67,6 +68,7 @@ class DiskCache {
   using key_type = KeyT;
   using SmartPtr = std::unique_ptr<DiskCache>;
   static absl::StatusOr<SmartPtr> New(const CacheOptions& opts);
+  static bool IsEmpty(const std::string& dir);
   absl::Status Put(const KeyT& key, ValueT&& val);
   absl::StatusOr<ValueT> Get(const KeyT& key, uint64_t* create_unix_secs = nullptr);
   size_t Delete(const KeyT& key);
@@ -126,6 +128,13 @@ class DiskCache {
 
   Stats stats_;
 };
+template <class K, class V, class H, class E>
+bool DiskCache<K, V, H, E>::IsEmpty(const std::string& dir) {
+  std::string path = absl::StrFormat("%s/index", dir.c_str());
+  std::error_code err;
+  bool r = std::filesystem::exists(path, err);
+  return r;
+}
 
 template <class K, class V, class H, class E>
 absl::StatusOr<typename DiskCache<K, V, H, E>::SmartPtr> DiskCache<K, V, H, E>::New(const CacheOptions& opts) {

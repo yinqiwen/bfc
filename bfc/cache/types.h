@@ -134,8 +134,8 @@ class MemCacheKey {
   };
   T key_;
 };
-#pragma pack()
 
+#pragma pack(4)
 class DiskEntryHeader {
  public:
   DiskEntryHeader() {
@@ -198,7 +198,7 @@ class DiskEntryHeader {
   };
 };
 static_assert(sizeof(DiskEntryHeader) == 20, "sizeof(DiskEntryHeader) != 20");
-#pragma pack(0)
+#pragma pack()
 
 template <typename KeyT, typename ValueT>
 struct DiskEntryValue {
