@@ -134,7 +134,8 @@ class MemCacheKey {
   };
   T key_;
 };
-#pragma pack(4)
+#pragma pack()
+
 class DiskEntryHeader {
  public:
   DiskEntryHeader() {

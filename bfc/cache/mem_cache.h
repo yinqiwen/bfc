@@ -333,8 +333,8 @@ absl::StatusOr<Ret> MemCache<K, V, H, E>::Visit(const K& key, VisitFunc<Ret, val
           if (ttl_refresh) {
             key_holder.SetRefreshing(true);
           }
+          *ttl_expired = ttl_refresh;
         }
-        *ttl_expired = ttl_refresh;
       }
       stats_.cache_hit.increment(1);
       return f(buckets_[bucket_idx].values[i]);
