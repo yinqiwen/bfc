@@ -464,8 +464,9 @@ absl::Status DiskCache<K, V, H, E>::Put(const K& key, V&& val) {
   disk_entry.SetHash(hashcode);
 
   HashBucketEntry* unused_entry = nullptr;
-  std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
+  // std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
   for (auto& entry : buckets_[bucket_idx].entries) {
+    std::lock_guard<BucketLock> guard(entry.GetLock());
     if (entry.Unused()) {
       if (unused_entry == nullptr) {
         unused_entry = &entry;
@@ -493,6 +494,8 @@ absl::Status DiskCache<K, V, H, E>::Put(const K& key, V&& val) {
       }
     }
   }
+
+  std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
   if (!opts_.append_only) {
     auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false);
     if (disk_entry_result.ok()) {
@@ -529,8 +532,9 @@ template <class K, class V, class H, class E>
 absl::StatusOr<V> DiskCache<K, V, H, E>::Get(const K& key, uint64_t* create_unix_secs) {
   uint64_t hashcode = hash_(key);
   uint32_t bucket_idx = GetBucketIndex(hashcode);
-  std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
-  for (const auto& entry : buckets_[bucket_idx].entries) {
+  // std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
+  for (auto& entry : buckets_[bucket_idx].entries) {
+    std::lock_guard<BucketLock> guard(entry.GetLock());
     if (entry.Unused()) {
       continue;
     } else {
@@ -547,6 +551,7 @@ absl::StatusOr<V> DiskCache<K, V, H, E>::Get(const K& key, uint64_t* create_unix
       }
     }
   }
+  std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
   auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false);
   if (disk_entry_result.ok()) {
     DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
@@ -564,8 +569,9 @@ template <class K, class V, class H, class E>
 size_t DiskCache<K, V, H, E>::Delete(const K& key) {
   uint64_t hashcode = hash_(key);
   uint32_t bucket_idx = GetBucketIndex(hashcode);
-  std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
-  for (const auto& entry : buckets_[bucket_idx].entries) {
+  // std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
+  for (auto& entry : buckets_[bucket_idx].entries) {
+    std::lock_guard<BucketLock> guard(entry.GetLock());
     if (entry.Unused()) {
       continue;
     } else {
@@ -580,6 +586,7 @@ size_t DiskCache<K, V, H, E>::Delete(const K& key) {
       }
     }
   }
+  std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
   auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false);
   if (disk_entry_result.ok()) {
     DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());

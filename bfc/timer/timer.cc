@@ -31,7 +31,7 @@
 #include "folly/Singleton.h"
 #include "gflags/gflags.h"
 
-DEFINE_int32(bfc_timer_executor_thread_num, 1, "cpu timer executor thread num");
+DEFINE_int32(bfc_timer_executor_thread_num, 2, "cpu timer executor thread num");
 
 namespace {
 struct PrivateTag {};

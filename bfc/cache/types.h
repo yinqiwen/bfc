@@ -46,29 +46,23 @@ using VisitFunc = std::function<Ret(T&)>;
 template <typename T>
 class MemCacheKey {
  public:
-  MemCacheKey(const T& key) : key_(key) {
-    control_ = 0;
-    // lock_.init();
-  }
+  MemCacheKey(const T& key) : key_(key) { control_ = 0; }
 
   MemCacheKey(const MemCacheKey& other) {
     control_ = other.control_;
     key_ = other.key_;
   }
   ~MemCacheKey() { Clear(); }
-  void SetKey(const T& key) { key_ = key; }
+  void SetKey(const T& key) {
+    key_ = key;
+    refreshing_ = 0;
+  }
   const T& GetKey() const { return key_; }
   inline void Clear() {
-    // if (lock) {
-    //   lock_.lock();
-    // }
     refreshing_ = 0;
     access_clock_ = 0;
     create_clock_ = 0;
     empty_ = 0;
-    // if (lock) {
-    //   lock_.unlock();
-    // }
   }
   bool IsEmpty() const { return empty_; }
   void SetEmpty(bool v) {

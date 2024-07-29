@@ -13,8 +13,6 @@ cc_library(
     hdrs = [
         "timer.h",
     ],
-    deps = [
-    ],
 )
 
 cc_test(

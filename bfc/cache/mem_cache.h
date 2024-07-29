@@ -105,8 +105,8 @@ class MemCache {
   void Delete(uint32_t bucket_idx, uint32_t list_idx);
 
   CacheOptions opts_;
-  folly::fbvector<Bucket> buckets_;
-  folly::fbvector<BucketLock> bucket_locks_;
+  std::vector<Bucket> buckets_;
+  std::vector<BucketLock> bucket_locks_;
   HashFcn hash_;
   EqualFcn equal_;
   std::atomic<uint64_t> size_{0};
@@ -300,6 +300,7 @@ absl::Status MemCache<K, V, H, E>::Put(const K& key, V&& val, uint32_t create_un
     }
     if (equal_(key_holder.GetKey(), key)) {
       // update
+      key_holder.SetRefreshing(false);
       buckets_[bucket_idx].values[i] = std::move(val);
       return absl::OkStatus();
     }

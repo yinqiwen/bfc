@@ -43,10 +43,6 @@ namespace bfc {
 
 using TimerTask = std::function<void(void)>;
 
-// struct State {
-//   std::atomic<bool> state{false};
-//   ~State() { printf("####state dest\n"); }
-// };
 class Timer;
 class TimerTaskId {
  public:

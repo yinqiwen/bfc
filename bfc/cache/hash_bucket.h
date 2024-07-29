@@ -48,11 +48,11 @@ static_assert(Address::kAddressBits == 48, "Address::kAddressBits != 48");
 struct HashBucketEntry {
   /// Invalid value in the hash table
   static constexpr uint64_t kInvalidEntry = 0;
-  static constexpr uint32_t kHashBits = 64 - Address::kAddressBits;
+  static constexpr uint32_t kHashBits = 64 - Address::kAddressBits - 1;
   static constexpr uint64_t kMaxHash = ((1ULL << kHashBits) - 1);
-
+  using Lock = folly::PicoSpinLock<uint64_t>;
   HashBucketEntry() : control_{0} {}
-  HashBucketEntry(Address address, uint16_t tag) : address_{address.Control()}, hash_{tag} {}
+  HashBucketEntry(Address address, uint16_t tag) : address_{address.Control()}, hash_{tag}, lock_bit_(0) {}
   HashBucketEntry(uint64_t code) : control_{code} {}
   HashBucketEntry(const HashBucketEntry& other) : control_{other.control_} {}
 
@@ -70,17 +70,16 @@ struct HashBucketEntry {
     uint64_t expect_hash0 = (hashcode & kMaxHash);
     return hash_ == expect_hash0;
   }
-  // inline bool Tentative() const { return static_cast<bool>(tentative_); }
-  // inline void SetTentative(bool desired) { tentative_ = desired; }
-  // inline bool Erased() const { return static_cast<bool>(erased_); }
-  // inline void SetErased(bool desired) { erased_ = desired; }
+  inline Lock& GetLock() { return lock_; }
+
   union {
     struct {
       uint64_t address_ : 48;  // corresponds to logical address
       uint64_t hash_ : kHashBits;
-      // uint64_t erased_ : 1;
+      uint64_t lock_bit_ : 1;
     };
     uint64_t control_;
+    Lock lock_;
   };
 };
 static_assert(sizeof(HashBucketEntry) == 8, "sizeof(HashBucketEntry) != 8");
