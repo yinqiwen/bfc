@@ -57,7 +57,7 @@ class MemCache {
   using key_type = KeyT;
   using SmartPtr = std::unique_ptr<MemCache>;
   static absl::StatusOr<SmartPtr> New(const CacheOptions& opts);
-  absl::Status Put(const KeyT& key, ValueT&& val);
+  absl::Status Put(const KeyT& key, ValueT&& val, uint32_t create_unix_secs = 0);
   absl::StatusOr<ValueT> Get(const KeyT& key, ReadOptions opt = {}, bool* ttl_expired = nullptr);
   size_t Delete(const KeyT& key);
   size_t Size() const { return size_.load(); }
@@ -277,10 +277,17 @@ void MemCache<K, V, H, E>::Delete(uint32_t bucket_idx, uint32_t list_idx) {
 }
 
 template <class K, class V, class H, class E>
-absl::Status MemCache<K, V, H, E>::Put(const K& key, V&& val) {
+absl::Status MemCache<K, V, H, E>::Put(const K& key, V&& val, uint32_t create_unix_secs) {
   uint64_t hashcode = hash_(key);
   uint32_t bucket_idx = GetBucketIndex(hashcode);
   MemCacheKey<K> new_key(key);
+  auto now_sec = gettimeofday_s();
+  new_key.SetAccessClock(now_sec);
+  if (create_unix_secs > 0) {
+    new_key.SetCreateClock(create_unix_secs);
+  } else {
+    new_key.SetCreateClock(now_sec);
+  }
   std::lock_guard<BucketLock> guard(bucket_locks_[bucket_idx]);
   int64_t empty_holder_idx = -1;
   for (size_t i = 0; i < buckets_[bucket_idx].keys.size(); i++) {
