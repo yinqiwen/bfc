@@ -41,9 +41,9 @@ using namespace bfc;
 
 TEST(DiskCacheBase, simple) {
   folly::SingletonVault::singleton()->registrationComplete();
-  CacheOptions opts(100000);
-  opts.dir = "./";
   using Cache = DiskCache<int64_t, std::string_view>;
+  typename Cache::Options opts(100000);
+  opts.dir = "./";
   auto cache_result = Cache::New(opts);
   ASSERT_TRUE(cache_result.ok());
   auto cache = std::move(cache_result.value());
@@ -84,9 +84,9 @@ TEST(DiskCacheBase, simple) {
 
 TEST(DiskCacheBase, reload) {
   folly::SingletonVault::singleton()->registrationComplete();
-  CacheOptions opts(100000);
-  opts.dir = "./";
   using Cache = DiskCache<int64_t, std::string_view>;
+  typename Cache::Options opts(100000);
+  opts.dir = "./";
   auto cache_result = Cache::New(opts);
   ASSERT_TRUE(cache_result.ok());
   auto cache = std::move(cache_result.value());

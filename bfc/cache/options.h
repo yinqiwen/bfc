@@ -37,20 +37,41 @@
 
 namespace bfc {
 
-struct CacheOptions {
-  std::string dir;
+// struct CacheOptions {
+//   std::string dir;
+//   uint32_t max_size = 4 * 1024 * 1024;
+//   uint32_t max_segments = 0;  // 0 means no limit
+//   uint32_t segment_delete_delay_secs = 15;
+//   uint32_t save_limit_mb_bytes_per_10ms = 1;  // 100MB/s
+//   uint32_t segment_ttl_secs = 24 * 3600;      // 1day
+//   uint32_t sample_routine_interval_ms = 10;
+//   uint32_t sample_count = 10;
+//   uint32_t ttl_secs = 4 * 3600;
+//   uint32_t empty_item_ttl_secs = 3600;
+
+//   bool append_only = true;
+//   CacheOptions(uint32_t n = 4 * 1024 * 1024) : max_size(n) {}
+// };
+
+struct MemCacheOptions {
   uint32_t max_size = 4 * 1024 * 1024;
-  uint32_t max_segments = 0;  // 0 means no limit
-  uint32_t segment_delete_delay_secs = 15;
-  uint32_t save_limit_mb_bytes_per_10ms = 1;  // 100MB/s
-  uint32_t segment_ttl_secs = 24 * 3600;      // 1day
   uint32_t sample_routine_interval_ms = 10;
   uint32_t sample_count = 10;
   uint32_t ttl_secs = 4 * 3600;
   uint32_t empty_item_ttl_secs = 3600;
+  MemCacheOptions(uint32_t n = 4 * 1024 * 1024) : max_size(n) {}
+};
 
+struct DiskCacheOptions {
+  std::string dir;
+  uint32_t max_size = 4 * 1024 * 1024;
+  uint32_t max_segments = 0;  // 0 means no limit
+  uint32_t sample_routine_interval_ms = 10;
+  uint32_t segment_delete_delay_secs = 15;
+  uint32_t save_limit_mb_bytes_per_10ms = 1;  // 100MB/s
+  uint32_t ttl_secs = 24 * 3600;              // 1day
   bool append_only = true;
-  CacheOptions(uint32_t n = 4 * 1024 * 1024) : max_size(n) {}
+  DiskCacheOptions(uint32_t n = 4 * 1024 * 1024) : max_size(n) {}
 };
 
 struct ReadOptions {

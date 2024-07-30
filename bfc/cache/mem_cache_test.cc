@@ -43,8 +43,8 @@ using namespace bfc;
 
 TEST(MemCache, simple) {
   folly::SingletonVault::singleton()->registrationComplete();
-  CacheOptions opts(100000);
   using Cache = MemCache<int64_t, std::string>;
+  Cache::Options opts(100000);
   auto cache_result = Cache::New(opts);
   ASSERT_TRUE(cache_result.ok());
   auto cache = std::move(cache_result.value());
@@ -82,8 +82,8 @@ TEST(MemCache, simple) {
 
 TEST(MemCache, ptr) {
   folly::SingletonVault::singleton()->registrationComplete();
-  CacheOptions opts(100000);
   using Cache = MemCache<int64_t, folly::ReadMostlyMainPtr<std::string>>;
+  Cache::Options opts(100000);
   auto cache_result = Cache::New(opts);
   ASSERT_TRUE(cache_result.ok());
   auto cache = std::move(cache_result.value());

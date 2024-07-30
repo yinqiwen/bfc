@@ -74,6 +74,7 @@ class SegmentStore {
   static constexpr uint32_t kMaxSegmentFileSize = 64 * 1024 * 1024;
   static constexpr uint32_t kSegmentBits = 22;
   static constexpr uint32_t kMaxSegmentId = ((1ULL << kSegmentBits) - 1);
+  // static constexpr uint32_t kMaxSegmentId = 127;
   static constexpr uint32_t kMaxValueSize = kMaxSegmentFileSize - kSegmentHeaderSize;
 
   struct SegmentHeader {

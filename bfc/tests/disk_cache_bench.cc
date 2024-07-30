@@ -57,12 +57,12 @@ template <typename T>
 T rand_key();
 template <>
 int64_t rand_key<int64_t>() {
-  auto rand = folly::Random::rand32(0, FLAGS_max_size * 2, g_rng);
+  auto rand = folly::Random::rand32(0, static_cast<uint32_t>(FLAGS_max_size * 1.2), g_rng);
   return static_cast<int64_t>(rand);
 }
 template <>
 std::string rand_key<std::string>() {
-  auto rand = folly::Random::rand32(0, FLAGS_max_size * 2, g_rng);
+  auto rand = folly::Random::rand32(0, static_cast<uint32_t>(FLAGS_max_size * 1.2), g_rng);
   std::string key(g_string_key_prefix);
   key.append(std::to_string(rand));
   return key;
@@ -131,9 +131,11 @@ struct TestCache {
 
 template <typename Cache>
 void test_cache() {
-  bfc::CacheOptions opt;
+  typename Cache::Options opt;
   opt.dir = "./";
-  opt.max_segments = 20;
+  opt.max_segments = 100;
+  // opt.ttl_secs = 600;
+  opt.append_only = true;
   opt.max_size = FLAGS_max_size;
   auto result = Cache::New(opt);
   if (!result.ok()) {
@@ -160,9 +162,11 @@ void test_cache() {
   float read_qps = FLAGS_read_threads * FLAGS_N * 1000000.0 / g_read_latency.readFull();
   float write_qps = FLAGS_read_threads * FLAGS_N * 1000000.0 / g_write_latency.readFull();
   bfc::Stats& mem_cache_stats = test_cache.cache_->GetStats();
-  fmt::print("[Read]Read {} items per thread({}), avg qps per thread:{}, cache_hit:{}, cache_missing:{}, evict:{}\n",
-             FLAGS_N, FLAGS_read_threads, read_qps, mem_cache_stats.cache_hit.readFull(),
-             mem_cache_stats.cache_missing.readFull(), mem_cache_stats.evit_count.readFull());
+  fmt::print(
+      "[Read]Read {} items per thread({}), avg qps per thread:{}, cache_hit:{}, cache_missing:{}, evict:{}, "
+      "read_fail:{}\n",
+      FLAGS_N, FLAGS_read_threads, read_qps, mem_cache_stats.cache_hit.readFull(),
+      mem_cache_stats.cache_missing.readFull(), mem_cache_stats.evit_count.readFull(), g_read_fail.readFull());
   fmt::print("[Write]Write {} items per thread({}), avg qps per thread:{}, write_fail:{}\n", FLAGS_N,
              FLAGS_write_threads, write_qps, g_write_fail.readFull());
 }

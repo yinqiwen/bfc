@@ -131,7 +131,7 @@ struct TestCache {
 
 template <typename Cache>
 void test_cache() {
-  bfc::CacheOptions opt;
+  typename Cache::Options opt;
   opt.max_size = FLAGS_max_size;
   auto result = Cache::New(opt);
   if (!result.ok()) {

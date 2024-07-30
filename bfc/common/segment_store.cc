@@ -99,7 +99,8 @@ int32_t SegmentStore::GetSegmentIdx(uint32_t id) const {
     return id - segments_[0].id;
   } else {
     if (id >= segments_[0].id) {
-      return id - segments_[0].id;
+      uint32_t idx = id - segments_[0].id;
+      return idx < segments_.size() ? static_cast<int32_t>(idx) : -1;
     }
     if (id < segments_[0].id && id <= segments_[segments_.size() - 1].id) {
       uint32_t ridx = segments_[segments_.size() - 1].id - id;
@@ -133,6 +134,7 @@ absl::Status SegmentStore::NewSegment(uint32_t id) {
   segment.header->create_unix_secs = static_cast<uint64_t>(gettimeofday_s());
   segment.header->write_offset = kSegmentHeaderSize;
   segment.cached_create_unix_secs = segment.header->create_unix_secs;
+  BFC_INFO("Segment:{} created.", segment_file_path);
 
   segments_.emplace_back(std::move(segment));
   if (opts_.max_segments > 0 && segments_.size() > opts_.max_segments) {
@@ -177,7 +179,7 @@ void SegmentStore::RemoveSegment(Segment& segment) {
         // remove file
         delete delete_file;
         int rc = ::remove(to_delete_file_path.c_str());
-        BFC_INFO("Remove segment:{} with rc:{}", to_delete_file_path, rc);
+        BFC_INFO("Segment:{} dealy remove with rc:{}", to_delete_file_path, rc);
       },
       std::chrono::seconds(opts_.segment_delete_delay_secs));
 }

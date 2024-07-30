@@ -64,10 +64,11 @@ namespace bfc {
 template <class KeyT, class ValueT, class HashFcn = std::hash<KeyT>, class EqualFcn = std::equal_to<KeyT>>
 class DiskCache {
  public:
+  using Options = DiskCacheOptions;
   using value_type = ValueT;
   using key_type = KeyT;
   using SmartPtr = std::unique_ptr<DiskCache>;
-  static absl::StatusOr<SmartPtr> New(const CacheOptions& opts);
+  static absl::StatusOr<SmartPtr> New(const Options& opts);
   static bool IsEmpty(const std::string& dir);
   absl::Status Put(const KeyT& key, ValueT&& val);
   absl::StatusOr<ValueT> Get(const KeyT& key, uint64_t* create_unix_secs = nullptr);
@@ -94,12 +95,12 @@ class DiskCache {
   using BucketLock = HashBucketOverflowEntry::Lock;
 
   DiskCache() = default;
-  absl::Status Init(const CacheOptions& opts);
+  absl::Status Init(const Options& opts);
   absl::Status Load();
   inline uint32_t GetBucketIndex(uint64_t hashcode) const {
     return static_cast<uint32_t>(hashcode % (cache_header_->num_buckets));
   }
-  absl::Status NewSegment(uint32_t id);
+
   absl::StatusOr<Address> Write(const std::vector<uint8_t>& content);
   absl::Status UpdateValue(Address addr, DiskEntryHeader exist_header, const std::vector<uint8_t>& content);
 
@@ -113,7 +114,7 @@ class DiskCache {
 
   void SampleRoutine();
 
-  CacheOptions opts_;
+  Options opts_;
   uint8_t* cache_index_buffer_ = nullptr;
   DiskCacheHeader* cache_header_ = nullptr;
   HashBucket* buckets_ = nullptr;
@@ -139,7 +140,7 @@ bool DiskCache<K, V, H, E>::IsEmpty(const std::string& dir) {
 }
 
 template <class K, class V, class H, class E>
-absl::StatusOr<typename DiskCache<K, V, H, E>::SmartPtr> DiskCache<K, V, H, E>::New(const CacheOptions& opts) {
+absl::StatusOr<typename DiskCache<K, V, H, E>::SmartPtr> DiskCache<K, V, H, E>::New(const Options& opts) {
   SmartPtr p(new DiskCache);
   auto status = p->Init(opts);
   if (!status.ok()) {
@@ -154,7 +155,7 @@ DiskCache<K, V, H, E>::~DiskCache() {
   delete[] cache_index_buffer_;
 }
 template <class K, class V, class H, class E>
-absl::Status DiskCache<K, V, H, E>::Init(const CacheOptions& opts) {
+absl::Status DiskCache<K, V, H, E>::Init(const Options& opts) {
   opts_ = opts;
   if (opts_.dir.empty()) {
     return absl::InvalidArgumentError("empty 'dir' option");
@@ -177,7 +178,7 @@ absl::Status DiskCache<K, V, H, E>::Init(const CacheOptions& opts) {
     segment_store_opts.dir = opts_.dir;
     segment_store_opts.max_segments = opts_.max_segments;
     segment_store_opts.segment_delete_delay_secs = opts_.segment_delete_delay_secs;
-    segment_store_opts.segment_ttl_secs = opts_.segment_ttl_secs;
+    segment_store_opts.segment_ttl_secs = opts_.ttl_secs;
     auto segment_store_result = SegmentStore::New(segment_store_opts);
     if (!segment_store_result.ok()) {
       return segment_store_result.status();
@@ -219,7 +220,7 @@ absl::Status DiskCache<K, V, H, E>::Load() {
     segment_store_opts.dir = opts_.dir;
     segment_store_opts.max_segments = opts_.max_segments;
     segment_store_opts.segment_delete_delay_secs = opts_.segment_delete_delay_secs;
-    segment_store_opts.segment_ttl_secs = opts_.segment_ttl_secs;
+    segment_store_opts.segment_ttl_secs = opts_.ttl_secs;
     segment_store_opts.end_segment = cache_header_->end_segment;
     segment_store_opts.start_segment = cache_header_->start_segment;
     auto segment_store_result = SegmentStore::New(segment_store_opts);

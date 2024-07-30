@@ -54,10 +54,11 @@ namespace bfc {
 template <class KeyT, class ValueT, class HashFcn = std::hash<KeyT>, class EqualFcn = std::equal_to<KeyT>>
 class MemCache {
  public:
+  using Options = MemCacheOptions;
   using value_type = ValueT;
   using key_type = KeyT;
   using SmartPtr = std::unique_ptr<MemCache>;
-  static absl::StatusOr<SmartPtr> New(const CacheOptions& opts);
+  static absl::StatusOr<SmartPtr> New(const Options& opts);
   absl::Status Put(const KeyT& key, ValueT&& val, uint32_t create_unix_secs = 0);
   absl::StatusOr<ValueT> Get(const KeyT& key, ReadOptions opt = {}, bool* ttl_expired = nullptr);
   size_t Delete(const KeyT& key);
@@ -95,7 +96,7 @@ class MemCache {
   // };
 
   MemCache() = default;
-  absl::Status Init(const CacheOptions& opts);
+  absl::Status Init(const Options& opts);
 
   inline uint32_t GetBucketIndex(uint64_t hashcode) const {
     return static_cast<uint32_t>(hashcode % (buckets_.size()));
@@ -107,7 +108,7 @@ class MemCache {
   std::vector<SampleItem> CacheRandomGetN(uint32_t n);
   void Delete(uint32_t bucket_idx, uint32_t list_idx);
 
-  CacheOptions opts_;
+  Options opts_;
   std::vector<Bucket> buckets_;
   std::vector<BucketLock> bucket_locks_;
   HashFcn hash_;
@@ -124,7 +125,7 @@ class MemCache {
 };
 
 template <class K, class V, class H, class E>
-absl::StatusOr<typename MemCache<K, V, H, E>::SmartPtr> MemCache<K, V, H, E>::New(const CacheOptions& opts) {
+absl::StatusOr<typename MemCache<K, V, H, E>::SmartPtr> MemCache<K, V, H, E>::New(const Options& opts) {
   SmartPtr p(new MemCache);
   auto status = p->Init(opts);
   if (!status.ok()) {
@@ -138,7 +139,7 @@ MemCache<K, V, H, E>::~MemCache() {
   sample_task_id_.Cancel();
 }
 template <class K, class V, class H, class E>
-absl::Status MemCache<K, V, H, E>::Init(const CacheOptions& opts) {
+absl::Status MemCache<K, V, H, E>::Init(const Options& opts) {
   opts_ = opts;
   buckets_.resize(opts_.max_size);
   bucket_locks_.resize(opts_.max_size);
