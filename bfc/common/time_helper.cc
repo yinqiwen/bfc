@@ -34,6 +34,7 @@
 #include <time.h>
 
 namespace bfc {
+
 int64_t gettimeofday_us() {
   struct timeval tv;
   uint64_t ust;

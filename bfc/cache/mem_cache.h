@@ -47,6 +47,7 @@
 #include "bfc/cache/options.h"
 #include "bfc/cache/stats.h"
 #include "bfc/cache/types.h"
+#include "bfc/common/cached_time.h"
 #include "bfc/common/time_helper.h"
 #include "bfc/timer/timer.h"
 
@@ -284,7 +285,7 @@ absl::Status MemCache<K, V, H, E>::Put(const K& key, V&& val, uint32_t create_un
   uint64_t hashcode = hash_(key);
   uint32_t bucket_idx = GetBucketIndex(hashcode);
   MemCacheKey<K> new_key(key);
-  auto now_sec = gettimeofday_s();
+  auto now_sec = CachedTime::GetInstance()->GetUnixSecs();
   new_key.SetAccessClock(now_sec);
   if (create_unix_secs > 0) {
     new_key.SetCreateClock(create_unix_secs);
@@ -334,7 +335,7 @@ absl::StatusOr<Ret> MemCache<K, V, H, E>::Visit(const K& key, VisitFunc<Ret, val
     }
     if (equal_(key_holder.GetKey(), key)) {
       if (opt.update_access_timestamp) {
-        key_holder.SetAccessClock(gettimeofday_s());
+        key_holder.SetAccessClock(CachedTime::GetInstance()->GetUnixSecs());
       }
       if (nullptr != ttl_expired) {
         uint32_t create_idle_secs = key_holder.GetCreateIdleTimeSecs();

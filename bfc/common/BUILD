@@ -1,8 +1,3 @@
-load(
-    "//bfc:copts/configure_copts.bzl",
-    "BFC_DEFAULT_LINKOPTS",
-)
-
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
@@ -21,6 +16,18 @@ cc_library(
     srcs = ["time_helper.cc"],
     hdrs = [
         "time_helper.h",
+    ],
+)
+
+cc_library(
+    name = "cached_time",
+    srcs = ["cached_time.cc"],
+    hdrs = [
+        "cached_time.h",
+    ],
+    deps = [
+        ":time_helper",
+        "//bfc/timer",
     ],
 )
 

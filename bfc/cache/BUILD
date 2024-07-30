@@ -80,6 +80,7 @@ cc_library(
         ":stats",
         ":types",
         "//bfc/cache:options",
+        "//bfc/common:cached_time",
         "//bfc/log",
         "//bfc/timer",
         "@com_google_absl//absl/cleanup",
