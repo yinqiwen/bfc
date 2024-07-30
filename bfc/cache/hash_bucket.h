@@ -75,11 +75,11 @@ struct HashBucketEntry {
 
   union {
     struct {
-      uint64_t address_ : 48;  // corresponds to logical address
-      uint64_t hash_ : kHashBits;
-      uint64_t lock_bit_ : 1;
+      volatile uint64_t address_ : 48;  // corresponds to logical address
+      volatile uint64_t hash_ : kHashBits;
+      volatile uint64_t lock_bit_ : 1;
     };
-    uint64_t control_;
+    volatile uint64_t control_;
     Lock lock_;
   };
 };
@@ -110,10 +110,10 @@ struct HashBucketOverflowEntry {
 
   union {
     struct {
-      uint64_t address_ : Address::kAddressBits;
+      volatile uint64_t address_ : Address::kAddressBits;
       uint64_t unused_ : 13;
-      uint64_t erased_ : 1;
-      uint64_t tentative_ : 1;
+      volatile uint64_t erased_ : 1;
+      volatile uint64_t tentative_ : 1;
       uint64_t lock_bit_ : 1;
     };
     uint64_t control_;

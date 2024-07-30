@@ -31,6 +31,7 @@
 #include "bfc/cache/kv_bucket.h"
 #include <folly/Singleton.h>
 #include <gtest/gtest.h>
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -49,4 +50,21 @@ TEST(KeyValueBucket, simple) {
     ASSERT_EQ(test.GetKey(i), i);
     ASSERT_EQ(test.GetValue(i), std::to_string(i));
   }
+}
+
+struct Int {
+  union {
+    uint64_t control_{0};
+    std::atomic<uint64_t> atomic_control_;
+  };
+};
+
+TEST(KeyValueBucket, atomic_init) {
+  ASSERT_EQ(8, sizeof(Int));
+  Int i;
+  i.control_ = 100;
+  ASSERT_EQ(100, i.atomic_control_.load());
+
+  i.atomic_control_ = 1000;
+  ASSERT_EQ(1000, i.control_);
 }
