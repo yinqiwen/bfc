@@ -43,6 +43,7 @@
 #include "folly/synchronization/MicroSpinLock.h"
 #include "folly/synchronization/PicoSpinLock.h"
 
+#include "bfc/cache/kv_bucket.h"
 #include "bfc/cache/options.h"
 #include "bfc/cache/stats.h"
 #include "bfc/cache/types.h"
@@ -73,7 +74,7 @@ class MemCache {
   static constexpr size_t kArraySizeHint = 8;
   static constexpr uint32_t kLRUSamplePoolSize = 128;
   static constexpr uint32_t kMaxLRUEvictCountPerLoop = 100;
-  using KeyLock = folly::PicoSpinLock<uint64_t>;
+
   using BucketLock = folly::MicroSpinLock;
   struct SampleItem {
     int32_t bucket_idx = -1;
@@ -86,10 +87,12 @@ class MemCache {
     }
   };
 
-  struct Bucket {
-    folly::fbvector<MemCacheKey<key_type>> keys;
-    folly::fbvector<value_type> values;
-  };
+  using Bucket = KeyValueBucket<MemCacheKey<key_type>, value_type>;
+
+  // struct Bucket {
+  //   folly::fbvector<MemCacheKey<key_type>> keys;
+  //   folly::fbvector<value_type> values;
+  // };
 
   MemCache() = default;
   absl::Status Init(const CacheOptions& opts);
@@ -158,7 +161,9 @@ std::vector<typename MemCache<K, V, H, E>::SampleItem> MemCache<K, V, H, E>::Cac
     Bucket& bucket = buckets_[rand];
     std::lock_guard<BucketLock> guard(bucket_locks_[rand]);
     uint32_t list_idx = 0;
-    for (const auto& key : bucket.keys) {
+    // for (const auto& key : bucket.keys) {
+    for (uint32_t i = 0; i < bucket.Size(); i++) {
+      auto& key = bucket.GetKey(i);
       list_idx++;
       if (key.IsEmpty()) {
         continue;
@@ -189,12 +194,6 @@ void MemCache<K, V, H, E>::EvictionPoolPopulate() {
   auto& tls_lru_sample_pool = *lru_sample_pool_;
   std::vector<SampleItem> samples = CacheRandomGetN(opts_.sample_count);
   for (auto& item : samples) {
-    // K key = iter->first;
-    // if (iter->first == index_config_.emptyKey || iter->first == index_config_.erasedKey ||
-    //     iter->first == index_config_.lockedKey) {
-    //   continue;
-    // }
-    // uint32_t cache_index = iter.getIndex();
     uint32_t idle_unix_secs = item.idle_unix_secs;
 
     uint32_t k = 0;
@@ -241,10 +240,10 @@ void MemCache<K, V, H, E>::PerformEvictions() {
     auto sample = tls_lru_sample_pool[k];
     tls_lru_sample_pool[k].Clear();
     std::lock_guard<BucketLock> guard(bucket_locks_[sample.bucket_idx]);
-    if (buckets_[sample.bucket_idx].keys.size() <= static_cast<size_t>(sample.list_idx)) {
+    if (buckets_[sample.bucket_idx].Size() <= static_cast<uint32_t>(sample.list_idx)) {
       continue;
     }
-    if (buckets_[sample.bucket_idx].keys[sample.list_idx].GetAccessIdleTimeSecs() >= sample.idle_unix_secs) {
+    if (buckets_[sample.bucket_idx].GetKey(sample.list_idx).GetAccessIdleTimeSecs() >= sample.idle_unix_secs) {
       // delete
       Delete(sample.bucket_idx, sample.list_idx);
       // stats_.lru_evit_count.increment(1);
@@ -268,12 +267,13 @@ void MemCache<K, V, H, E>::SampleRoutine() {
 }
 template <class K, class V, class H, class E>
 void MemCache<K, V, H, E>::Delete(uint32_t bucket_idx, uint32_t list_idx) {
-  if (buckets_[bucket_idx].keys.size() <= kArraySizeHint) {
-    buckets_[bucket_idx].keys[list_idx].SetEmpty(true);
-    buckets_[bucket_idx].values[list_idx] = {};
+  if (buckets_[bucket_idx].Size() <= kArraySizeHint) {
+    buckets_[bucket_idx].GetKey(list_idx).SetEmpty(true);
+    buckets_[bucket_idx].GetValue(list_idx) = {};
   } else {
-    buckets_[bucket_idx].keys.erase(buckets_[bucket_idx].keys.begin() + list_idx);
-    buckets_[bucket_idx].values.erase(buckets_[bucket_idx].values.begin() + list_idx);
+    buckets_[bucket_idx].Remove(list_idx);
+    // buckets_[bucket_idx].keys.erase(buckets_[bucket_idx].keys.begin() + list_idx);
+    // buckets_[bucket_idx].values.erase(buckets_[bucket_idx].values.begin() + list_idx);
   }
   size_--;
 }
@@ -292,8 +292,8 @@ absl::Status MemCache<K, V, H, E>::Put(const K& key, V&& val, uint32_t create_un
   }
   std::lock_guard<BucketLock> guard(bucket_locks_[bucket_idx]);
   int64_t empty_holder_idx = -1;
-  for (size_t i = 0; i < buckets_[bucket_idx].keys.size(); i++) {
-    auto& key_holder = buckets_[bucket_idx].keys[i];
+  for (uint32_t i = 0; i < buckets_[bucket_idx].Size(); i++) {
+    auto& key_holder = buckets_[bucket_idx].GetKey(i);
     if (key_holder.IsEmpty()) {
       if (empty_holder_idx < 0) {
         empty_holder_idx = i;
@@ -303,16 +303,17 @@ absl::Status MemCache<K, V, H, E>::Put(const K& key, V&& val, uint32_t create_un
     if (equal_(key_holder.GetKey(), key)) {
       // update
       key_holder.SetRefreshing(false);
-      buckets_[bucket_idx].values[i] = std::move(val);
+      buckets_[bucket_idx].GetValue(i) = std::move(val);
       return absl::OkStatus();
     }
   }
   if (empty_holder_idx >= 0) {
-    buckets_[bucket_idx].keys[empty_holder_idx].SetKey(key);
-    buckets_[bucket_idx].values[empty_holder_idx] = std::move(val);
+    buckets_[bucket_idx].GetKey(empty_holder_idx).SetKey(key);
+    buckets_[bucket_idx].GetValue(empty_holder_idx) = std::move(val);
   } else {
-    buckets_[bucket_idx].keys.emplace_back(new_key);
-    buckets_[bucket_idx].values.emplace_back(std::move(val));
+    buckets_[bucket_idx].Add(std::move(new_key), std::move(val));
+    // buckets_[bucket_idx].keys.emplace_back(new_key);
+    // buckets_[bucket_idx].values.emplace_back(std::move(val));
   }
   size_++;
   return absl::OkStatus();
@@ -325,8 +326,8 @@ absl::StatusOr<Ret> MemCache<K, V, H, E>::Visit(const K& key, VisitFunc<Ret, val
   uint32_t bucket_idx = GetBucketIndex(hashcode);
 
   std::lock_guard<BucketLock> guard(bucket_locks_[bucket_idx]);
-  for (size_t i = 0; i < buckets_[bucket_idx].keys.size(); i++) {
-    auto& key_holder = buckets_[bucket_idx].keys[i];
+  for (uint32_t i = 0; i < buckets_[bucket_idx].Size(); i++) {
+    auto& key_holder = buckets_[bucket_idx].GetKey(i);
     if (key_holder.IsEmpty()) {
       continue;
     }
@@ -336,7 +337,7 @@ absl::StatusOr<Ret> MemCache<K, V, H, E>::Visit(const K& key, VisitFunc<Ret, val
       }
       if (nullptr != ttl_expired) {
         uint32_t create_idle_secs = key_holder.GetCreateIdleTimeSecs();
-        bool is_empty_value = buckets_[bucket_idx].values[i] == empty_value_;
+        bool is_empty_value = buckets_[bucket_idx].GetValue(i) == empty_value_;
         bool ttl_refresh =
             is_empty_value ? create_idle_secs > opts_.empty_item_ttl_secs : create_idle_secs > opts_.ttl_secs;
         if (!key_holder.IsRefreshing()) {
@@ -347,7 +348,7 @@ absl::StatusOr<Ret> MemCache<K, V, H, E>::Visit(const K& key, VisitFunc<Ret, val
         }
       }
       stats_.cache_hit.increment(1);
-      return f(buckets_[bucket_idx].values[i]);
+      return f(buckets_[bucket_idx].GetValue(i));
     }
   }
   stats_.cache_missing.increment(1);
@@ -364,8 +365,8 @@ size_t MemCache<K, V, H, E>::Delete(const K& key) {
   uint64_t hashcode = hash_(key);
   uint32_t bucket_idx = GetBucketIndex(hashcode);
   std::lock_guard<BucketLock> guard(bucket_locks_[bucket_idx]);
-  for (size_t i = 0; i < buckets_[bucket_idx].keys.size(); i++) {
-    auto& key_holder = buckets_[bucket_idx].keys[i];
+  for (uint32_t i = 0; i < buckets_[bucket_idx].Size(); i++) {
+    auto& key_holder = buckets_[bucket_idx].GetKey(i);
     if (equal_(key_holder.GetKey(), key)) {
       Delete(bucket_idx, i);
       return 1;

@@ -42,6 +42,15 @@ cc_library(
 )
 
 cc_library(
+    name = "kv_bucket",
+    hdrs = [
+        "kv_bucket.h",
+    ],
+    deps = [
+    ],
+)
+
+cc_library(
     name = "types",
     hdrs = [
         "types.h",
@@ -67,6 +76,7 @@ cc_library(
         "mem_cache.h",
     ],
     deps = [
+        ":kv_bucket",
         ":stats",
         ":types",
         "//bfc/cache:options",
@@ -93,6 +103,18 @@ cc_library(
         "//bfc/timer",
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+cc_test(
+    name = "kv_bucket_test",
+    size = "small",
+    srcs = ["kv_bucket_test.cc"],
+    linkopts = BFC_DEFAULT_LINKOPTS,
+    linkstatic = True,
+    deps = [
+        ":kv_bucket",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
