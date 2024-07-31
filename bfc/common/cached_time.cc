@@ -41,6 +41,7 @@ static folly::Singleton<CachedTime, PrivateTag> the_singleton([]() { return new 
 
 std::shared_ptr<CachedTime> CachedTime::GetInstance() { return the_singleton.try_get(); }
 CachedTime::CachedTime() {
+  cached_unix_secs_ = gettimeofday_s();
   task_id_ = Timer::GetInstance()->ScheduleAtFixedRate([this]() { cached_unix_secs_ = gettimeofday_s(); },
                                                        std::chrono::milliseconds(10));
 }

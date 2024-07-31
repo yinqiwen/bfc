@@ -34,6 +34,7 @@
 #include <functional>
 #include "absl/types/span.h"
 #include "bfc/cache/address.h"
+#include "bfc/common/cached_time.h"
 #include "bfc/common/time_helper.h"
 #include "folly/experimental/ReadMostlySharedPtr.h"
 #include "folly/synchronization/PicoSpinLock.h"
@@ -110,7 +111,7 @@ class MemCacheKey {
   using Lock = folly::PicoSpinLock<uint64_t>;
 
   uint32_t GetCurrentClock() const {
-    int64_t ts = gettimeofday_s();
+    int64_t ts = CachedTime::GetInstance()->GetUnixSecs();
     return static_cast<uint32_t>(ts) & kClockMax;
   }
 

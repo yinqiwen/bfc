@@ -57,6 +57,7 @@ cc_library(
     ],
     deps = [
         ":address",
+        "//bfc/common:cached_time",
         "//bfc/common:time_helper",
     ],
 )
