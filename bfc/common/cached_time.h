@@ -37,7 +37,7 @@ class CachedTime {
  public:
   CachedTime();
   ~CachedTime();
-  static std::shared_ptr<CachedTime> GetInstance();
+  static std::shared_ptr<CachedTime>& GetInstance();
   int64_t GetUnixSecs() { return cached_unix_secs_; }
 
  private:

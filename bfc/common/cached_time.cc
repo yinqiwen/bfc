@@ -39,7 +39,12 @@ struct PrivateTag {};
 namespace bfc {
 static folly::Singleton<CachedTime, PrivateTag> the_singleton([]() { return new CachedTime; });
 
-std::shared_ptr<CachedTime> CachedTime::GetInstance() { return the_singleton.try_get(); }
+std::shared_ptr<CachedTime>& CachedTime::GetInstance() {
+  static thread_local std::shared_ptr<CachedTime> thread_local_cache = the_singleton.try_get();
+
+  return thread_local_cache;
+}
+
 CachedTime::CachedTime() {
   cached_unix_secs_ = gettimeofday_s();
   task_id_ = Timer::GetInstance()->ScheduleAtFixedRate([this]() { cached_unix_secs_ = gettimeofday_s(); },
