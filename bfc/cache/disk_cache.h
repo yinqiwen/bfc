@@ -107,7 +107,7 @@ class DiskCache {
   std::string GetIndexFilePath(bool tmp);
 
   absl::StatusOr<DiskEntryValue<key_type, value_type>> GetEntry(const KeyT& key, uint64_t hashcode, Address start_addr,
-                                                                bool with_value);
+                                                                bool with_value, uint32_t& depth);
   void PutEntry(uint64_t hashcode, Address addr, uint8_t* entry_ptr, DiskEntryHeader& header);
   absl::Status PutDiskEntry(DiskEntryHeader& disk_entry, uint32_t bucket_idx, uint64_t hashcode, const key_type& key,
                             std::vector<uint8_t>& content);
@@ -399,7 +399,8 @@ absl::StatusOr<Address> DiskCache<K, V, H, E>::Write(const std::vector<uint8_t>&
 }
 template <class K, class V, class H, class E>
 absl::StatusOr<DiskEntryValue<K, V>> DiskCache<K, V, H, E>::GetEntry(const K& key, uint64_t hashcode,
-                                                                     Address start_addr, bool with_value) {
+                                                                     Address start_addr, bool with_value,
+                                                                     uint32_t& depth) {
   if (start_addr.Control() == 0) {
     return absl::NotFoundError("");
   }
@@ -417,7 +418,8 @@ absl::StatusOr<DiskEntryValue<K, V>> DiskCache<K, V, H, E>::GetEntry(const K& ke
   }
 
   if (!header.EqualHash(hashcode) || header.Erased()) {
-    return GetEntry(key, hashcode, header.GetPrev(), with_value);
+    depth++;
+    return GetEntry(key, hashcode, header.GetPrev(), with_value, depth);
   } else {
     absl::Span<const uint8_t> key_view;
     absl::Span<const uint8_t> value_view;
@@ -443,7 +445,8 @@ absl::StatusOr<DiskEntryValue<K, V>> DiskCache<K, V, H, E>::GetEntry(const K& ke
       }
       return entry;
     } else {
-      return GetEntry(key, hashcode, header.GetPrev(), with_value);
+      depth++;
+      return GetEntry(key, hashcode, header.GetPrev(), with_value, depth);
     }
   }
 }
@@ -461,11 +464,16 @@ absl::Status DiskCache<K, V, H, E>::PutDiskEntry(DiskEntryHeader& disk_entry, ui
     } else {
       if (entry.EqualHash(hashcode)) {
         if (!opts_.append_only) {
-          auto disk_entry_result = GetEntry(key, hashcode, entry.GetAddress(), false);
+          uint32_t depth = 0;
+          auto disk_entry_result = GetEntry(key, hashcode, entry.GetAddress(), false, depth);
           if (disk_entry_result.ok()) {
             DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
             if (exist_disk_entry.header.GetValueSize() >= disk_entry.GetValueSize()) {
               return UpdateValue(exist_disk_entry.addr, exist_disk_entry.header, content);
+            }
+          } else {
+            if (absl::IsOutOfRange(disk_entry_result.status()) && depth == 0) {
+              entry.Clear();
             }
           }
         }
@@ -485,7 +493,8 @@ absl::Status DiskCache<K, V, H, E>::PutDiskEntry(DiskEntryHeader& disk_entry, ui
   {
     std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
     if (!opts_.append_only) {
-      auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false);
+      uint32_t depth = 0;
+      auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false, depth);
       if (disk_entry_result.ok()) {
         DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
         if (exist_disk_entry.header.GetValueSize() >= disk_entry.GetValueSize()) {
@@ -557,8 +566,10 @@ absl::StatusOr<V> DiskCache<K, V, H, E>::Get(const K& key, uint64_t* create_unix
     if (entry.Unused()) {
       continue;
     } else {
+      auto entry_addr = entry.GetAddress();
       if (entry.EqualHash(hashcode)) {
-        auto disk_entry_result = GetEntry(key, hashcode, entry.GetAddress(), true);
+        uint32_t depth = 0;
+        auto disk_entry_result = GetEntry(key, hashcode, entry_addr, true, depth);
         if (disk_entry_result.ok()) {
           DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
           if (nullptr != create_unix_secs) {
@@ -566,12 +577,21 @@ absl::StatusOr<V> DiskCache<K, V, H, E>::Get(const K& key, uint64_t* create_unix
           }
           stats_.cache_hit.increment(1);
           return std::move(exist_disk_entry.value);
+        } else {
+          if (absl::IsOutOfRange(disk_entry_result.status()) && depth == 0) {
+            std::lock_guard<BucketLock> guard(entry.GetLock());
+            if (entry.GetAddress() == entry_addr) {
+              entry.Clear();
+            }
+          }
+          return disk_entry_result.status();
         }
       }
     }
   }
   // std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
-  auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), true);
+  uint32_t depth = 0;
+  auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), true, depth);
   if (disk_entry_result.ok()) {
     DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
     if (nullptr != create_unix_secs) {
@@ -588,25 +608,32 @@ template <class K, class V, class H, class E>
 size_t DiskCache<K, V, H, E>::Delete(const K& key) {
   uint64_t hashcode = hash_(key);
   uint32_t bucket_idx = GetBucketIndex(hashcode);
-  // std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
+
   for (auto& entry : buckets_[bucket_idx].entries) {
     std::lock_guard<BucketLock> guard(entry.GetLock());
     if (entry.Unused()) {
       continue;
     } else {
       if (entry.EqualHash(hashcode)) {
-        auto disk_entry_result = GetEntry(key, hashcode, entry.GetAddress(), true);
+        uint32_t depth = 0;
+        auto disk_entry_result = GetEntry(key, hashcode, entry.GetAddress(), true, depth);
         if (disk_entry_result.ok()) {
           DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
           exist_disk_entry.header.SetErased(true);
           auto status = UpdateValue(exist_disk_entry.addr, exist_disk_entry.header, {});
           return status.ok() ? 1 : 0;
+        } else {
+          if (absl::IsOutOfRange(disk_entry_result.status()) && depth == 0) {
+            entry.Clear();
+          }
+          return 0;
         }
       }
     }
   }
   std::lock_guard<BucketLock> guard(buckets_[bucket_idx].overflow_entry.GetLock());
-  auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false);
+  uint32_t depth = 0;
+  auto disk_entry_result = GetEntry(key, hashcode, buckets_[bucket_idx].overflow_entry.GetAddress(), false, depth);
   if (disk_entry_result.ok()) {
     DiskEntryValue<K, V> exist_disk_entry = std::move(disk_entry_result.value());
     exist_disk_entry.header.SetErased(true);

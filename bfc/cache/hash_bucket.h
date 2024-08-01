@@ -65,7 +65,13 @@ struct HashBucketEntry {
   inline bool Unused() const { return address_ == 0; }
   inline Address GetAddress() const { return Address{address_}; }
   inline void SetAddress(Address addr) { address_ = addr.Control(); }
+  inline void Clear() {
+    address_ = 0;
+    hash_ = 0;
+  }
+
   uint32_t Contorl() const { return control_; }
+
   void SetHash(uint64_t hashcode) { hash_ = (hashcode & kMaxHash); }
   bool EqualHash(uint64_t hashcode) const {
     uint64_t expect_hash0 = (hashcode & kMaxHash);
@@ -75,12 +81,13 @@ struct HashBucketEntry {
 
   union {
     struct {
-      volatile uint64_t address_ : 48;  // corresponds to logical address
-      volatile uint64_t hash_ : kHashBits;
-      volatile uint64_t lock_bit_ : 1;
+      uint64_t address_ : 48;  // corresponds to logical address
+      uint64_t hash_ : kHashBits;
+      uint64_t lock_bit_ : 1;
     };
-    volatile uint64_t control_;
+    uint64_t control_;
     Lock lock_;
+    std::atomic<uint64_t> atomic_control_;
   };
 };
 static_assert(sizeof(HashBucketEntry) == 8, "sizeof(HashBucketEntry) != 8");
