@@ -136,7 +136,7 @@ bool DiskCache<K, V, H, E>::IsEmpty(const std::string& dir) {
   std::string path = absl::StrFormat("%s/index", dir.c_str());
   std::error_code err;
   bool r = std::filesystem::exists(path, err);
-  return r;
+  return !r;
 }
 
 template <class K, class V, class H, class E>
