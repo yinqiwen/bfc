@@ -57,6 +57,7 @@ class MemCacheKey {
   void SetKey(const T& key) {
     key_ = key;
     refreshing_ = 0;
+    empty_ = 0;
   }
   const T& GetKey() const { return key_; }
   inline void Clear() {

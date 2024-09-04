@@ -46,6 +46,7 @@ void Timer::Task::timeoutExpired() noexcept {
     delete this;
     return;
   }
+
   auto exec_f = f;
   executor->add(std::move(exec_f));
   if (fix_rate) {
